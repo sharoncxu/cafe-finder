@@ -218,7 +218,7 @@ function App() {
           {isLoading && (
             <div className="message bot">
               <div className="message-content">
-                <div className="typing">Searching for great places...</div>
+                <div className="typing">Searching for great places</div>
               </div>
             </div>
           )}
