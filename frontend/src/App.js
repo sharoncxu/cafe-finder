@@ -196,10 +196,10 @@ function App() {
                             {place.user_ratings_total && ` (${place.user_ratings_total} reviews)`}
                           </div>
                           <div className="place-address">{place.vicinity}</div>
-                          {place.filter_matches && Object.keys(place.filter_matches).some(key => place.filter_matches[key]) && (
+                          {place.filter_matches && Object.keys(place.filter_matches).some(key => place.filter_matches[key] && filterStates[key] === 'include') && (
                             <div className="filter-matches">
                               {Object.entries(place.filter_matches)
-                                .filter(([_, matches]) => matches)
+                                .filter(([filterName, matches]) => matches && filterStates[filterName] === 'include')
                                 .map(([filterName, _]) => (
                                   <span key={filterName} className="filter-match">
                                     ✓ {filterName}
