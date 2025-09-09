@@ -6,30 +6,29 @@ function App() {
   const [messages, setMessages] = useState([
     {
       type: 'bot',
-      content: 'Hi! I\'m your location finding agent. Tell me what kind of place you\'re looking for and where, and I\'ll help you find the perfect cafe or restaurant!'
+      content: 'Hi! I\'m here to help you find cute cafes. Tell me what kind of place you\'re looking for, and I\'ll help you find the perfect spot!'
     }
   ]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [filterStates, setFilterStates] = useState({
     pastries: 'neutral',
-    food: 'neutral', 
-    study: 'neutral',
+    food: 'neutral',
+    coffee: 'neutral',
     wifi: 'neutral',
-    outlets: 'neutral'
+    outlets: 'neutral',
+    seating: 'neutral'
   });
-  const [sessionId] = useState(() => {
-    // Generate a unique session ID for this browser session
-    return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-  });
+  const [justChanged, setJustChanged] = useState(new Set());
   const messagesEndRef = useRef(null);
 
   const filters = [
     { id: 'pastries', label: '🥐 Pastries', description: 'Great baked goods' },
     { id: 'food', label: '🍽️ Food', description: 'Full meal options' },
-    { id: 'study', label: '📚 Study', description: 'Quiet workspace' },
+    { id: 'coffee', label: '☕ Coffee', description: 'Quality coffee drinks' },
     { id: 'wifi', label: '📶 WiFi', description: 'Strong internet' },
-    { id: 'outlets', label: '🔌 Outlets', description: 'Power charging' }
+    { id: 'outlets', label: '🔌 Outlets', description: 'Charging outlets' },
+    { id: 'seating', label: '🪑 Seating', description: 'Comfortable seating' }
   ];
 
   const scrollToBottom = () => {
@@ -41,6 +40,9 @@ function App() {
   }, [messages]);
 
   const toggleFilter = (filterId) => {
+    // Mark this filter as just changed to disable hover effect
+    setJustChanged(prev => new Set(prev).add(filterId));
+
     setFilterStates(prev => {
       const currentState = prev[filterId];
       let nextState;
@@ -57,11 +59,39 @@ function App() {
     });
   };
 
+  const handleMouseEnter = (filterId) => {
+    // Re-enable hover effect when mouse enters
+    setJustChanged(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(filterId);
+      return newSet;
+    });
+  };
+
   const sendMessage = async () => {
     if (!inputMessage.trim()) return;
 
     const userMessage = inputMessage;
     
+    // Build filter message based on states
+    const includeFilters = Object.entries(filterStates)
+      .filter(([_, state]) => state === 'include')
+      .map(([filter, _]) => filter);
+    
+    const excludeFilters = Object.entries(filterStates)
+      .filter(([_, state]) => state === 'exclude')
+      .map(([filter, _]) => filter);
+    
+    let filtersMessage = '';
+    if (includeFilters.length > 0) {
+      filtersMessage += ` Must have: ${includeFilters.join(', ')}`;
+    }
+    if (excludeFilters.length > 0) {
+      filtersMessage += ` Avoid: ${excludeFilters.join(', ')}`;
+    }
+    
+    const fullMessage = userMessage + filtersMessage;
+
     // Add user message to chat
     setMessages(prev => [...prev, { type: 'user', content: userMessage }]);
     setInputMessage('');
@@ -69,34 +99,19 @@ function App() {
 
     try {
       const response = await axios.post('/api/chat', {
-        message: userMessage,
-        filters: filterStates,  // Send filter states to backend
-        sessionId: sessionId    // Send session ID for chat history
+        message: fullMessage,
+        filterStates: filterStates,
+        conversationHistory: messages  // Send conversation history to backend
       });
 
       // Add bot response to chat
-      const botMessage = { 
+      setMessages(prev => [...prev, { 
         type: 'bot', 
         content: response.data.response,
         places: response.data.places,
         location: response.data.location,
         filters: response.data.filters
-      };
-
-      // If chat history is returned, use it to set the complete conversation
-      if (response.data.chatHistory && response.data.chatHistory.length > 0) {
-        // Convert backend chat history format to frontend format
-        const convertedHistory = response.data.chatHistory.map(msg => ({
-          type: msg.role === 'user' ? 'user' : 'bot',
-          content: msg.content,
-          places: msg.places || undefined,
-          location: msg.location || undefined,
-          filters: msg.filters || undefined
-        }));
-        setMessages(convertedHistory);
-      } else {
-        setMessages(prev => [...prev, botMessage]);
-      }
+      }]);
     } catch (error) {
       console.error('Error sending message:', error);
       setMessages(prev => [...prev, { 
@@ -115,46 +130,88 @@ function App() {
     }
   };
 
+  const parseMarkdown = (text) => {
+    // Simple markdown parser for bold text
+    return text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  };
+
+  const renderMessageContent = (content) => {
+    return content.split('\n').map((line, i) => (
+      <div 
+        key={i} 
+        dangerouslySetInnerHTML={{ __html: parseMarkdown(line) }}
+      />
+    ));
+  };
+
   return (
     <div className="App">
       <header className="app-header">
-        <h1>Cute Cafe Finder</h1>
-        <p>Find the perfect cafes and restaurants near you</p>
+        <h1>✨Cute Cafe Finder✨</h1>
+        <p>Find the most popular and aesthetic cafes near you</p>
       </header>
-
-      <div className="filter-section">
-        <h3>What are you looking for?</h3>
-        <div className="filters">
-          {filters.map(filter => (
-            <button
-              key={filter.id}
-              className={`filter-btn ${filterStates[filter.id]}`}
-              onClick={() => toggleFilter(filter.id)}
-              title={`${filter.description} - Click to cycle: Neutral → Include → Exclude`}
-            >
-              {filterStates[filter.id] === 'include' && '✅ '}
-              {filterStates[filter.id] === 'exclude' && '❌ '}
-              {filter.label}
-            </button>
-          ))}
-        </div>
-        <div className="filter-legend">
-          <small>
-            <span className="legend-item">⚪ Neutral</span>
-            <span className="legend-item">✅ Must Have</span>
-            <span className="legend-item">❌ Avoid</span>
-          </small>
-        </div>
-      </div>
 
       <div className="chat-container">
         <div className="messages">
           {messages.map((message, index) => (
             <div key={index} className={`message ${message.type}`}>
               <div className="message-content">
-                {message.content.split('\n').map((line, i) => (
-                  <div key={i}>{line}</div>
-                ))}
+                {renderMessageContent(message.content)}
+                {message.places && message.places.length > 0 && (
+                  <div className="places-preview">
+                    {message.places.slice(0, 6).map((place, placeIndex) => (
+                      <div 
+                        key={placeIndex} 
+                        className="place-card clickable"
+                        onClick={() => {
+                          if (place.google_maps_link) {
+                            window.open(place.google_maps_link, '_blank');
+                          }
+                        }}
+                        title="Click to open in Google Maps"
+                      >
+                        <div className="place-image-container">
+                          {place.photo_urls && place.photo_urls.length > 0 ? (
+                            <img 
+                              src={place.photo_urls[0]} 
+                              alt={place.name} 
+                              className="place-photo"
+                              onError={(e) => {
+                                // Better fallback - show placeholder instead of hiding
+                                e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgdmlld0JveD0iMCAwIDQwMCAzMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSI0MDAiIGhlaWdodD0iMzAwIiBmaWxsPSIjZjNmNGY2Ii8+CjxwYXRoIGQ9Ik0yMDAgMTUwQzIwMCAxNzIuMDkxIDE4Mi4wOTEgMTkwIDE2MCAxOTBDMTM3LjkwOSAxOTAgMTIwIDE3Mi4wOTEgMTIwIDE1MEMxMjAgMTI3LjkwOSAxMzcuOTA5IDExMCAxNjAgMTEwQzE4Mi4wOTEgMTEwIDIwMCAxMjcuOTA5IDIwMCAxNTBaIiBmaWxsPSIjZDFkNWRiIi8+CjxwYXRoIGQ9Ik0yNDAgMTkwSDE2MEwyMDAgMTUwTDI0MCAxOTBaIiBmaWxsPSIjZDFkNWRiIi8+PC9zdmc+Cg==';
+                                e.target.classList.add('placeholder-image');
+                              }}
+                            />
+                          ) : (
+                            <div className="place-photo-placeholder">
+                              <div className="placeholder-icon">📍</div>
+                              <div className="placeholder-text">No image</div>
+                            </div>
+                          )}
+                        </div>
+                        <div className="place-info">
+                          <div className="place-name">{place.name}</div>
+                          <div className="place-rating">
+                            ⭐ {place.rating || 'N/A'} 
+                            {place.user_ratings_total && ` (${place.user_ratings_total} reviews)`}
+                          </div>
+                          <div className="place-address">{place.vicinity}</div>
+                          {place.filter_matches && Object.keys(place.filter_matches).some(key => place.filter_matches[key]) && (
+                            <div className="filter-matches">
+                              {Object.entries(place.filter_matches)
+                                .filter(([_, matches]) => matches)
+                                .map(([filterName, _]) => (
+                                  <span key={filterName} className="filter-match">
+                                    ✓ {filterName}
+                                  </span>
+                                ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           ))}
@@ -167,24 +224,49 @@ function App() {
           )}
           <div ref={messagesEndRef} />
         </div>
+      </div>
 
+      <div className="fixed-input-section">
         <div className="input-section">
           <div className="input-container">
-            <textarea
-              value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Tell me where you want to go and what you're looking for... (e.g., 'cafes in downtown Seattle' or 'study spots near UCLA')"
-              rows="2"
-              disabled={isLoading}
-            />
-            <button 
-              onClick={sendMessage} 
-              disabled={isLoading || !inputMessage.trim()}
-              className="send-btn"
-            >
-              Send
-            </button>
+            <div className="textarea-wrapper">
+              <textarea
+                value={inputMessage}
+                onChange={(e) => setInputMessage(e.target.value)}
+                onKeyPress={handleKeyPress}
+                placeholder="Tell me where you want to go... (e.g., 'cafes in downtown Seattle' or 'study spots near UCLA')"
+                rows="2"
+                disabled={isLoading}
+              />
+              <button 
+                onClick={sendMessage} 
+                disabled={isLoading || !inputMessage.trim()}
+                className="send-btn-icon"
+                title="Send message"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M2 21L23 12L2 3V10L17 12L2 14V21Z" fill="currentColor"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="filter-section">
+          <div className="filters">
+            {filters.map(filter => (
+              <button
+                key={filter.id}
+                className={`filter-btn ${filterStates[filter.id]} ${justChanged.has(filter.id) ? 'hover-disabled' : ''}`}
+                onClick={() => toggleFilter(filter.id)}
+                onMouseEnter={() => handleMouseEnter(filter.id)}
+                title={`${filter.description} - Click to cycle: Neutral → Include → Exclude`}
+              >
+                {filterStates[filter.id] === 'include' && '✅ '}
+                {filterStates[filter.id] === 'exclude' && '❌ '}
+                {filter.label}
+              </button>
+            ))}
           </div>
         </div>
       </div>
