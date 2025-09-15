@@ -218,7 +218,11 @@ function App() {
           {isLoading && (
             <div className="message bot">
               <div className="message-content">
-                <div className="typing">Searching for great places</div>
+                <div className="gradient-dots-loading">
+                  <div className="dot"></div>
+                  <div className="dot"></div>
+                  <div className="dot"></div>
+                </div>
               </div>
             </div>
           )}
